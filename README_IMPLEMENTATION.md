@@ -48,7 +48,6 @@
 ### ステップ1: 依存パッケージのインストール
 
 ```bash
-cd "ObsidianとGitHub同期のオーケストレーション提案"
 npm install
 ```
 
@@ -153,10 +152,10 @@ const markdownBody = htmlToMarkdown($input.item.json.result.data.body);
 
 ## 📚 参考ドキュメント
 
-- [完全ガイド](./Obsidian%20⇄%20note.com%20双方向同期システム%20-%20完全ガイド.md)
 - [実装ガイド](./IMPLEMENTATION_GUIDE.md)
-- [最終実装ガイド](./Obsidian%20Vault%20to%20note.com%20自動下書きシステム%20-%20最終実装ガイド.md)
-- [逆方向同期ガイド](./note.com%20→%20GitHub%20逆方向同期システム%20-%20最終実装ガイド.md)
+- [完全ガイド](./ObsidianとGitHub同期のオーケストレーション提案/Obsidian%20⇄%20note.com%20双方向同期システム%20-%20完全ガイド.md)
+- [最終実装ガイド](./ObsidianとGitHub同期のオーケストレーション提案/Obsidian%20Vault%20to%20note.com%20自動下書きシステム%20-%20最終実装ガイド.md)
+- [逆方向同期ガイド](./ObsidianとGitHub同期のオーケストレーション提案/note.com%20→%20GitHub%20逆方向同期システム%20-%20最終実装ガイド.md)
 
 ## 🔄 今後の改善案
 
