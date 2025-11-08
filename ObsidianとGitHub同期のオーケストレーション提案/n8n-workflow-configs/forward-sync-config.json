@@ -1,0 +1,244 @@
+{
+  "name": "GitHub → note.com 順方向同期",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "github-push"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-commits",
+              "leftValue": "={{ $json.body.commits }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-commits",
+      "name": "IF (コミットチェック)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "filePath": ".note-mapping.json",
+        "options": {
+          "failOnError": false
+        }
+      },
+      "id": "github-mapping",
+      "name": "GitHub (マッピングファイル取得)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "githubApi": {
+          "id": "github-credentials",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// マッピングファイルの初期化\nconst mappingFileInput = $input.item.json;\n\nlet mappingData;\n\nif (mappingFileInput.content) {\n  const decodedContent = Buffer.from(mappingFileInput.content, 'base64').toString('utf-8');\n  try {\n    mappingData = JSON.parse(decodedContent);\n  } catch (e) {\n    mappingData = {\n      version: \"1.0\",\n      last_updated: new Date().toISOString(),\n      mappings: {}\n    };\n  }\n} else {\n  mappingData = {\n    version: \"1.0\",\n    last_updated: new Date().toISOString(),\n    mappings: {}\n  };\n}\n\nreturn { mappingData };"
+      },
+      "id": "code-init-mapping",
+      "name": "Code (マッピング初期化)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "={{ $json.body.head_commit.modified }}",
+        "options": {
+          "batchSize": 1
+        }
+      },
+      "id": "split-batches",
+      "name": "SplitInBatches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "filePath": "={{ $json.fileName }}"
+      },
+      "id": "github-file",
+      "name": "GitHub (ファイル取得)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "credentials": {
+        "githubApi": {
+          "id": "github-credentials",
+          "name": "GitHub API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// パース＆note ID取得\nconst fileContent = $input.item.json.content;\nconst filePath = $input.item.json.path || $input.item.json.fileName;\nconst mappingData = $node[\"Code (マッピング初期化)\"].json.mappingData;\n\nconst decodedContent = Buffer.from(fileContent, 'base64').toString('utf-8');\n\n// Frontmatterパース\nconst matter = (input) => {\n  const match = input.match(/^---\\r?\\n([\\s\\S]+?)\\r?\\n---\\r?\\n([\\s\\S]*)/);\n  if (!match) return { data: {}, content: input };\n  const frontmatter = match[1].split('\\n').reduce((acc, line) => {\n    const parts = line.split(':');\n    const key = parts[0].trim();\n    const value = parts.slice(1).join(':').trim();\n    if (key) acc[key] = value.replace(/['\"]/g, '');\n    return acc;\n  }, {});\n  return { data: frontmatter, content: match[2] };\n};\n\nconst { data, content } = matter(decodedContent);\n\n// Markdown to HTML変換\nconst markdownToHtml = (md) => {\n  md = md.replace(/^######\\s+(.*)$/gm, '<h6>$1</h6>');\n  md = md.replace(/^#####\\s+(.*)$/gm, '<h5>$1</h5>');\n  md = md.replace(/^####\\s+(.*)$/gm, '<h4>$1</h4>');\n  md = md.replace(/^###\\s+(.*)$/gm, '<h3>$1</h3>');\n  md = md.replace(/^##\\s+(.*)$/gm, '<h2>$1</h2>');\n  md = md.replace(/^#\\s+(.*)$/gm, '<h1>$1</h1>');\n  md = md.replace(/\\*\\*\\*(.*?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');\n  md = md.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');\n  md = md.replace(/\\*(.*?)\\*/g, '<em>$1</em>');\n  md = md.replace(/~~(.*?)~~/g, '<del>$1</del>');\n  md = md.replace(/```([\\s\\S]*?)```/g, '<pre><code>$1</code></pre>');\n  md = md.replace(/`([^`]+)`/g, '<code>$1</code>');\n  md = md.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href=\"$2\">$1</a>');\n  md = md.replace(/!\\[([^\\]]*)\\]\\(([^)]+)\\)/g, '<img src=\"$2\" alt=\"$1\" />');\n  md = md.replace(/\\n/g, '<br>');\n  return md;\n};\n\nconst htmlBody = markdownToHtml(content);\n\n// マッピングデータからnote_idを取得\nconst note_id = mappingData.mappings[filePath] ? mappingData.mappings[filePath].note_id : null;\n\n// タグを配列に変換\nlet tags = [];\nif (data.tags) {\n  if (Array.isArray(data.tags)) {\n    tags = data.tags;\n  } else {\n    tags = data.tags.replace(/[\\[\\]]/g, '').split(',').map(t => t.trim());\n  }\n}\n\nreturn {\n  filePath: filePath,\n  title: data.title || '無題',\n  body: htmlBody,\n  tags: tags,\n  note_id: note_id,\n  originalContent: decodedContent\n};"
+      },
+      "id": "code-parse",
+      "name": "Code (パース＆note ID取得)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NOTE_MCP_SERVER_URL }}/mcp",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"jsonrpc\": \"2.0\",\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"tool_name\": \"post-draft-note\",\n    \"inputs\": {\n      \"title\": \"{{ $json.title }}\",\n      \"body\": \"{{ $json.body }}\",\n      \"tags\": {{ JSON.stringify($json.tags) }},\n      \"id\": {{ $json.note_id ? '\"' + $json.note_id + '\"' : 'null' }}\n    }\n  },\n  \"id\": \"n8n-workflow-{{ $workflow.id }}\"\n}",
+        "options": {}
+      },
+      "id": "http-mcp",
+      "name": "HTTP Request (note-MCP-server)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// マッピングオブジェクト更新\nconst postResult = $input.item.json.result.data;\nconst originalData = $node[\"Code (パース＆note ID取得)\"].json;\nlet mappingData = $node[\"Code (マッピング初期化)\"].json.mappingData;\n\nconst filePath = originalData.filePath;\nconst newNoteId = postResult.key;\nconst noteUpdatedAt = postResult.updated_at || null;\nconst now = new Date().toISOString();\n\nif (mappingData.mappings[filePath]) {\n  mappingData.mappings[filePath].note_id = newNoteId;\n  mappingData.mappings[filePath].title = originalData.title;\n  mappingData.mappings[filePath].updated_at = now;\n  if (noteUpdatedAt) {\n    mappingData.mappings[filePath].note_updated_at = noteUpdatedAt;\n  }\n} else {\n  mappingData.mappings[filePath] = {\n    note_id: newNoteId,\n    title: originalData.title,\n    created_at: now,\n    updated_at: now\n  };\n  if (noteUpdatedAt) {\n    mappingData.mappings[filePath].note_updated_at = noteUpdatedAt;\n  }\n}\n\nmappingData.last_updated = now;\n\nreturn { mappingData };"
+      },
+      "id": "code-update-mapping",
+      "name": "Code (マッピング更新)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 変更チェック\nconst initialMapping = $node[\"Code (マッピング初期化)\"].json.mappingData;\nconst updatedMapping = $node[\"Code (マッピング更新)\"].json.mappingData;\n\nconst hasChanges = JSON.stringify(initialMapping) !== JSON.stringify(updatedMapping);\n\nif (hasChanges) {\n  return {\n    hasChanges: true,\n    updatedMapping: updatedMapping\n  };\n} else {\n  return {\n    hasChanges: false\n  };\n}"
+      },
+      "id": "code-check-changes",
+      "name": "Code (変更チェック)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-has-changes",
+              "leftValue": "={{ $json.hasChanges }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-changes",
+      "name": "IF (変更の有無)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "update",
+        "filePath": ".note-mapping.json",
+        "content": "={{ JSON.stringify($json.updatedMapping, null, 2) }}",
+        "commitMessage": "[BOT] Update .note-mapping.json"
+      },
+      "id": "github-update-mapping",
+      "name": "GitHub (マッピングファイル更新)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1,
+      "position": [2450, 300],
+      "credentials": {
+        "githubApi": {
+          "id": "github-credentials",
+          "name": "GitHub API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "IF (コミットチェック)", "type": "main", "index": 0}]]
+    },
+    "IF (コミットチェック)": {
+      "main": [[{"node": "GitHub (マッピングファイル取得)", "type": "main", "index": 0}]]
+    },
+    "GitHub (マッピングファイル取得)": {
+      "main": [[{"node": "Code (マッピング初期化)", "type": "main", "index": 0}]]
+    },
+    "Code (マッピング初期化)": {
+      "main": [[{"node": "SplitInBatches", "type": "main", "index": 0}]]
+    },
+    "SplitInBatches": {
+      "main": [[{"node": "GitHub (ファイル取得)", "type": "main", "index": 0}]]
+    },
+    "GitHub (ファイル取得)": {
+      "main": [[{"node": "Code (パース＆note ID取得)", "type": "main", "index": 0}]]
+    },
+    "Code (パース＆note ID取得)": {
+      "main": [[{"node": "HTTP Request (note-MCP-server)", "type": "main", "index": 0}]]
+    },
+    "HTTP Request (note-MCP-server)": {
+      "main": [[{"node": "Code (マッピング更新)", "type": "main", "index": 0}]]
+    },
+    "Code (マッピング更新)": {
+      "main": [[{"node": "Code (変更チェック)", "type": "main", "index": 0}]]
+    },
+    "Code (変更チェック)": {
+      "main": [[{"node": "IF (変更の有無)", "type": "main", "index": 0}]]
+    },
+    "IF (変更の有無)": {
+      "main": [[{"node": "GitHub (マッピングファイル更新)", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2025-01-XXT00:00:00.000Z",
+  "versionId": "1"
+}
+
