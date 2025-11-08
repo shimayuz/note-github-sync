@@ -299,7 +299,7 @@ tags: ["タグ1", "タグ2"]
 
 ## 参考ドキュメント
 
-- [Obsidian ⇄ note.com 双方向同期システム - 完全ガイド](./Obsidian%20⇄%20note.com%20双方向同期システム%20-%20完全ガイド.md)
-- [Obsidian Vault to note.com 自動下書きシステム - 最終実装ガイド](./Obsidian%20Vault%20to%20note.com%20自動下書きシステム%20-%20最終実装ガイド.md)
-- [note.com → GitHub 逆方向同期システム - 最終実装ガイド](./note.com%20→%20GitHub%20逆方向同期システム%20-%20最終実装ガイド.md)
+- [Obsidian ⇄ note.com 双方向同期システム - 完全ガイド](./ObsidianとGitHub同期のオーケストレーション提案/Obsidian%20⇄%20note.com%20双方向同期システム%20-%20完全ガイド.md)
+- [Obsidian Vault to note.com 自動下書きシステム - 最終実装ガイド](./ObsidianとGitHub同期のオーケストレーション提案/Obsidian%20Vault%20to%20note.com%20自動下書きシステム%20-%20最終実装ガイド.md)
+- [note.com → GitHub 逆方向同期システム - 最終実装ガイド](./ObsidianとGitHub同期のオーケストレーション提案/note.com%20→%20GitHub%20逆方向同期システム%20-%20最終実装ガイド.md)
 
